@@ -1,24 +1,10 @@
 const passport = require('passport');
-const LocalStrategy = require('passport-local').Strategy;
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
-const User = require('../models/user');
+const JwtStrategy = require('passport-jwt').Strategy;
+const ExtractJwt = require('passport-jwt').ExtractJwt;
+const User = require('../models/User');
 
-passport.use(new LocalStrategy({
-  usernameField: 'email'
-}, async (email, password, done) => {
-  try {
-    const user = await User.findOne({ email });
-    if (!user) return done(null, false, { message: 'Invalid credentials' });
-    
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) return done(null, false, { message: 'Invalid credentials' });
-    
-    return done(null, user);
-  } catch (err) {
-    return done(err);
-  }
-}));
-
+// Google Strategy
 passport.use(new GoogleStrategy({
   clientID: process.env.GOOGLE_CLIENT_ID,
   clientSecret: process.env.GOOGLE_CLIENT_SECRET,
@@ -39,7 +25,7 @@ passport.use(new GoogleStrategy({
           firstName: profile.name.givenName,
           lastName: profile.name.familyName,
           email: profile.emails[0].value,
-          dob: new Date('2000-01-01'), // Default DOB, should be updated
+          dob: new Date('2000-01-01'),
           profilePicture: profile.photos[0].value,
           university: 'Unknown',
           major: 'Undeclared'
@@ -53,14 +39,20 @@ passport.use(new GoogleStrategy({
   }
 }));
 
-passport.serializeUser((user, done) => done(null, user.id));
-passport.deserializeUser(async (id, done) => {
+// JWT Strategy
+const jwtOptions = {
+  jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+  secretOrKey: process.env.JWT_SECRET
+};
+
+passport.use(new JwtStrategy(jwtOptions, async (payload, done) => {
   try {
-    const user = await User.findById(id);
-    done(null, user);
+    const user = await User.findById(payload.userId);
+    if (user) return done(null, user);
+    return done(null, false);
   } catch (err) {
-    done(err);
+    return done(err, false);
   }
-});
+}));
 
 module.exports = passport;
